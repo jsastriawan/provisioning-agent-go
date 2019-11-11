@@ -71,6 +71,7 @@ type APFClient struct {
 	clientname    string
 	clientuuid    string
 	clientaddress string
+	stopped       bool
 }
 
 // DownlinkChannel keeps track individual channel inside APFConnection
@@ -87,7 +88,7 @@ type DownlinkChannel struct {
 
 // APFConnection keeps track the state of the APF connection to APFServer
 type APFConnection struct {
-	apfclient   APFClient
+	apfclient   *APFClient
 	accumulator []byte
 	conn        *websocket.Conn
 	state       int
@@ -96,11 +97,15 @@ type APFConnection struct {
 	channels    map[int]*DownlinkChannel
 }
 
+//StopAPFClient signals APFConnection for this APFCLient to stop
+func StopAPFClient(apc *APFClient) {
+	apc.stopped = true
+}
+
 // StartAPFClient starts APFClient
-func StartAPFClient(apc APFClient) {
+func StartAPFClient(apc *APFClient) {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags)
-	stopped := false
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -142,7 +147,7 @@ func StartAPFClient(apc APFClient) {
 			if err != nil {
 				log.Println("Read error message:", err)
 				apconn.timer <- false
-				stopped = true
+				apconn.apfclient.stopped = true
 				return
 			}
 			//log.Println("Message len: ", len(message))
@@ -167,10 +172,10 @@ func StartAPFClient(apc APFClient) {
 			}
 		case sg := <-sig:
 			log.Printf("Received %s signal\n", sg)
-			os.Exit(1)
+			return
 		}
-		if stopped {
-			os.Exit(1)
+		if apconn.apfclient.stopped {
+			return
 		}
 	}
 }

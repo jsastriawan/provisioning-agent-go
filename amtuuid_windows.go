@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"syscall"
 	"unicode/utf16"
@@ -156,7 +157,7 @@ func GetAMTUUID(h windows.Handle, amtuuid *syscall.GUID) int32 {
 	outbuf = append(outbuf, cmdcommand...)
 	var cmdlength = []byte{0x0, 0x0, 0x0, 0x0}
 	outbuf = append(outbuf, cmdlength...)
-	log.Println("Writing: ", len(outbuf), hex.EncodeToString(outbuf[0:12]))
+	//log.Println("Writing: ", len(outbuf), hex.EncodeToString(outbuf[0:12]))
 	var err = windows.WriteFile(h, outbuf[0:12], &done, nil)
 	if windows.GetLastError() != nil {
 		log.Println("GetAMTUUID:WriteFile:", done, err)
@@ -201,7 +202,7 @@ func GetLocalAdmin(h windows.Handle, cred *LocalAdmin) int32 {
 	outbuf = append(outbuf, cmdlength...)
 	var trail = make([]byte, 40)
 	outbuf = append(outbuf, trail...)
-	log.Println("Writing: ", len(outbuf), hex.EncodeToString(outbuf[0:]))
+	//log.Println("Writing: ", len(outbuf), hex.EncodeToString(outbuf[0:]))
 	var err = windows.WriteFile(h, outbuf[0:], &done, nil)
 	if windows.GetLastError() != nil {
 		log.Println("GetLocalAdmin:WriteFile:", done, err)
@@ -265,6 +266,7 @@ func main() {
 		log.Println("Main:GetAMTUUID: Failed to get AMTUUID.")
 	}
 	//log.Printf("%x %x %x %x\n", amtuuid.Data1, amtuuid.Data2, amtuuid.Data3, amtuuid.Data4)
+	amtuuidstr := fmt.Sprintf("%x-%x-%x-%s-%s", amtuuid.Data1, amtuuid.Data2, amtuuid.Data3, hex.EncodeToString(amtuuid.Data4[0:2]), hex.EncodeToString(amtuuid.Data4[2:]))
 	log.Printf("Main: AMT UUID:%x-%x-%x-%s-%s", amtuuid.Data1, amtuuid.Data2, amtuuid.Data3, hex.EncodeToString(amtuuid.Data4[0:2]), hex.EncodeToString(amtuuid.Data4[2:]))
 
 	//get local admin
@@ -275,4 +277,16 @@ func main() {
 	}
 	log.Printf("Main: AMT Local Admin username: %s, password: %s", amtcred.Username, amtcred.Password)
 	windows.CloseHandle(handle)
+	// APFClient to connect
+	var apf = APFClient{}
+	apf.apfuser = "9e15bf4f5766d45c"
+	apf.apfpassword = "A@xew9rt"
+	apf.apfurl = "wss://meshcentral.com/apf.ashx"
+	apf.apfkeepalive = 60000
+	apf.clientaddress = "127.0.0.1"
+	apf.clientname = "corem5-compute-stick"
+	apf.clientuuid = amtuuidstr
+	apf.stopped = false
+	// let's get it started
+	StartAPFClient(&apf)
 }
