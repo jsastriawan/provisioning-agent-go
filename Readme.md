@@ -8,11 +8,11 @@ go get github.com/x/sys/windows
 
 Run
 ~~~~
-go run amtuuid_windows.go apfclient.go
+go run main.go heci_windows.go apfclient.go
 ~~~~
 
 Build
 ~~~~
-go build -o test.exe amtuuid_windows.go apfclient.go
+go build -o test.exe main.go heci_windows.go apfclient.go
 test.exe
 ~~~~
