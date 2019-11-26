@@ -123,7 +123,8 @@ func StartAPFClient(apc *APFClient) {
 	dialer.TLSClientConfig = &config
 	c, resp, err := dialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatal("dial: ", resp.StatusCode, err)
+		log.Println("dial: ", resp, err)
+		return
 	}
 
 	// Fill up connection metadata

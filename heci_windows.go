@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"syscall"
 	"unicode/utf16"
@@ -122,15 +121,36 @@ func ConnectAMTHI(h windows.Handle, fwc *FWClient) int32 {
 	return -1
 }
 
+// GetMEIHandle retireves MEI handle
+func GetMEIHandle() windows.Handle {
+	var p = GetDevicePath()
+	log.Printf("GetDevicePath: %s\n", string(utf16.Decode(p)))
+	var handle, err = windows.CreateFile(&p[0], windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		log.Println("GetHECIVersion:CreateFile:", err)
+		return handle
+	}
+	// connect to AMTHI
+	var fwc FWClient
+	var res = ConnectAMTHI(handle, &fwc)
+	if res < 0 {
+		log.Println("GetHECIVersion:ConnectAMTHI: Failed to connect to AMTHI.")
+	}
+	log.Println("GetHECIVersion: FW Client:", fwc)
+	return handle
+}
+
 //GetHECIVersion retrieves HECI driver version from HECI AMT HIF
-func GetHECIVersion(h windows.Handle, amtver *HECIVersion) int32 {
-	if h == windows.InvalidHandle || amtver == nil {
+func GetHECIVersion(amtver *HECIVersion) int32 {
+	var handle = GetMEIHandle()
+	if handle == windows.InvalidHandle || amtver == nil {
 		return -1
 	}
+	defer windows.CloseHandle(handle)
 	var iocode uint32 = (0x8000 << 16) | (0x3 << 14) | (0x800 << 2) | 0
 	var outbp = (*byte)(unsafe.Pointer(amtver))
 	var byteret uint32 = 0
-	var err = windows.DeviceIoControl(h, iocode, nil, 16, outbp, 5, &byteret, nil)
+	var err = windows.DeviceIoControl(handle, iocode, nil, 16, outbp, 5, &byteret, nil)
 	if windows.GetLastError() != nil {
 		log.Println("GetHECIVersion:DeviceIoControl:", err, windows.GetLastError())
 	}
@@ -142,10 +162,13 @@ func GetHECIVersion(h windows.Handle, amtver *HECIVersion) int32 {
 }
 
 //GetAMTUUID retrieves AMT UUID via AMTHIF HECI
-func GetAMTUUID(h windows.Handle, amtuuid *syscall.GUID) int32 {
+func GetAMTUUID(amtuuid *syscall.GUID) int32 {
+	var h = GetMEIHandle()
 	if h == windows.InvalidHandle || amtuuid == nil {
 		return -1
 	}
+	defer windows.CloseHandle(h)
+
 	var cmd = AMTHIMessageHeader{}
 	cmd.Major = 1
 	cmd.Minor = 1
@@ -184,10 +207,13 @@ func GetAMTUUID(h windows.Handle, amtuuid *syscall.GUID) int32 {
 }
 
 //GetLocalAdmin retrieves AMT $OsAdmin credential
-func GetLocalAdmin(h windows.Handle, cred *LocalAdmin) int32 {
+func GetLocalAdmin(cred *LocalAdmin) int32 {
+	var h = GetMEIHandle()
 	if h == windows.InvalidHandle || cred == nil {
 		return -1
 	}
+	defer windows.CloseHandle(h)
+
 	var cmd = AMTHIMessageHeader{}
 	cmd.Major = 1
 	cmd.Minor = 1
@@ -225,68 +251,4 @@ func GetLocalAdmin(h windows.Handle, cred *LocalAdmin) int32 {
 		return 1
 	}
 	return -1
-}
-
-//var apc = APFClient{
-//	"wss://localhost:443/apf.ashx",
-//	"KfoAcdiaycDcnog4",
-//	"P@ssw0rd",
-//	60000,
-//	"test-machine",
-//	"8dad96cb-c3db-11e6-9c43-bc0000d20000",
-//	"10.2.55.131",
-//}
-
-func main() {
-	var p = GetDevicePath()
-	log.Printf("GetDevicePath: %s\n", string(utf16.Decode(p)))
-	var handle, err = windows.CreateFile(&p[0], windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	if err != nil {
-		log.Println("Main:CreateFile:", err)
-		return
-	}
-	// connect to AMTHI
-	var fwc FWClient
-	var res = ConnectAMTHI(handle, &fwc)
-	if res < 0 {
-		log.Println("Main:ConnectAMTHI: Failed to connect to AMTHI.")
-	}
-	log.Println("Main: FW Client:", fwc)
-	//get HECI Version
-	var heciver HECIVersion
-	res = GetHECIVersion(handle, &heciver)
-	if res < 0 {
-		log.Println("Main:GetHECIVersion: Failed to get HECI driver Version.")
-	}
-	log.Println("Main: HECI Version:", heciver)
-	//get AMT UUID
-	var amtuuid syscall.GUID
-	res = GetAMTUUID(handle, &amtuuid)
-	if res < 0 {
-		log.Println("Main:GetAMTUUID: Failed to get AMTUUID.")
-	}
-	//log.Printf("%x %x %x %x\n", amtuuid.Data1, amtuuid.Data2, amtuuid.Data3, amtuuid.Data4)
-	amtuuidstr := fmt.Sprintf("%x-%x-%x-%s-%s", amtuuid.Data1, amtuuid.Data2, amtuuid.Data3, hex.EncodeToString(amtuuid.Data4[0:2]), hex.EncodeToString(amtuuid.Data4[2:]))
-	log.Printf("Main: AMT UUID:%x-%x-%x-%s-%s", amtuuid.Data1, amtuuid.Data2, amtuuid.Data3, hex.EncodeToString(amtuuid.Data4[0:2]), hex.EncodeToString(amtuuid.Data4[2:]))
-
-	//get local admin
-	var amtcred LocalAdmin
-	res = GetLocalAdmin(handle, &amtcred)
-	if res < 0 {
-		log.Println("Main:GetLocalAdmin: Failed to get Local Admin credential")
-	}
-	log.Printf("Main: AMT Local Admin username: %s, password: %s", amtcred.Username, amtcred.Password)
-	windows.CloseHandle(handle)
-	// APFClient to connect
-	var apf = APFClient{}
-	apf.apfuser = "9e15bf4f5766d45c"
-	apf.apfpassword = "A@xew9rt"
-	apf.apfurl = "wss://meshcentral.com/apf.ashx"
-	apf.apfkeepalive = 60000
-	apf.clientaddress = "127.0.0.1"
-	apf.clientname = "corem5-compute-stick"
-	apf.clientuuid = amtuuidstr
-	apf.stopped = false
-	// let's get it started
-	StartAPFClient(&apf)
 }
